@@ -29,6 +29,8 @@ class WSClient:
         self.max_retries = 5
         self.retry_delay = 5
         self.shutdown_event = asyncio.Event()
+        self._current_websocket = None
+        self._connection_active = False
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
@@ -37,11 +39,11 @@ class WSClient:
         try:
             return Path("owner.txt").read_text().strip()
         except FileNotFoundError:
-            print("Error: owner.txt not found")
-            return None
+            print("owner.txt not found, using default email")
+            return "aryankhurana2324@gmail.com"
         except Exception as e:
             print(f"Error reading owner.txt: {e}")
-            return None
+            return "aryankhurana2324@gmail.com"
 
     async def send_output(
         self,
@@ -75,6 +77,101 @@ class WSClient:
             print(f"Sent {output_type} message: {message}")
         except Exception as e:
             self.logger.error(f"Error sending {output_type} message: {e}")
+
+    async def connect(self):
+        print("Attempting to connect...")
+        if not self.client_id:
+            print("Error: No client ID available")
+            return False
+
+        websocket_url = f"{self.server_url}/{self.client_id}"
+        print(f"WebSocket URL: {websocket_url}")
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        try:
+            websocket = await websockets.connect(
+                websocket_url,
+                ping_interval=30,
+                ping_timeout=10,
+            )
+            self._current_websocket = websocket
+            self._connection_active = True
+            print(f"Connected as {self.client_id} from {self.computer_name}")
+
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "device_connected",
+                        "email": self.owner_email,
+                        "machine_name": self.computer_name,
+                    }
+                )
+            )
+
+            while not self.shutdown_event.is_set():
+                try:
+                    message = await asyncio.wait_for(websocket.recv(), timeout=1.0)
+                    print(f"Received message: {message}")
+                    await self.handle_message(websocket, message)
+                except asyncio.TimeoutError:
+                    continue
+                except websockets.exceptions.ConnectionClosed:
+                    print("Connection closed")
+                    self._connection_active = False
+                    return False
+                except Exception as e:
+                    print(f"Error in message loop: {e}")
+                    self._connection_active = False
+                    return False
+
+            return True
+
+        except (websockets.exceptions.WebSocketException, ssl.SSLError) as e:
+            print(f"Connection error: {e}")
+            self._connection_active = False
+            return False
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            self._connection_active = False
+            return False
+
+    async def shutdown(self):
+        print("Initiating shutdown...")
+        self.shutdown_event.set()
+
+        disconnect_message = json.dumps(
+            {
+                "type": "device_disconnected",
+                "email": self.owner_email,
+                "machine_name": self.computer_name,
+            }
+        )
+
+        # Try to send disconnect message through existing connection first
+        if self._current_websocket and self._connection_active:
+            try:
+                await self._current_websocket.send(disconnect_message)
+                print("Disconnect message sent through existing connection")
+                await self._current_websocket.close()
+                return
+            except Exception as e:
+                print(f"Error sending disconnect through existing connection: {e}")
+
+        # If no existing connection or sending failed, try to establish new connection
+        if self.client_id:
+            try:
+                websocket = await websockets.connect(
+                    f"{self.server_url}/{self.client_id}",
+                    ping_interval=30,
+                    ping_timeout=10,
+                )
+                await websocket.send(disconnect_message)
+                print("Disconnect message sent through new connection")
+                await websocket.close()
+            except Exception as e:
+                print(f"Error sending disconnect message: {e}")
 
     async def handle_message(self, websocket, message: str):
         print(f"Handling message: {message}")
@@ -114,7 +211,6 @@ class WSClient:
                                         process.terminate()
                                         break
 
-                                    # Read from both stdout and stderr
                                     try:
                                         stdout_data = await process.stdout.readline()
                                         stderr_data = await process.stderr.readline()
@@ -126,12 +222,10 @@ class WSClient:
                                         ):
                                             break
 
-                                        # Handle stdout
                                         if stdout_data:
                                             output_line = stdout_data.decode().strip()
                                             if output_line:
                                                 output_buffer.append(output_line)
-                                                # Send immediate output update
                                                 await self.send_output(
                                                     websocket,
                                                     "command_output",
@@ -139,14 +233,12 @@ class WSClient:
                                                     output=output_line,
                                                 )
 
-                                        # Handle stderr
                                         if stderr_data:
                                             error_line = stderr_data.decode().strip()
                                             if error_line:
                                                 output_buffer.append(
                                                     f"ERROR: {error_line}"
                                                 )
-                                                # Send immediate error output
                                                 await self.send_output(
                                                     websocket,
                                                     "command_output",
@@ -162,7 +254,6 @@ class WSClient:
                                         )
                                         break
 
-                                # Wait for process to complete
                                 try:
                                     returncode = await asyncio.wait_for(
                                         process.wait(), timeout=5.0
@@ -180,7 +271,6 @@ class WSClient:
                                         process.kill()
                                     returncode = -1
 
-                                # Send final completion message
                                 await self.send_output(
                                     websocket,
                                     "command_complete",
@@ -204,59 +294,6 @@ class WSClient:
         except Exception as e:
             self.logger.error(f"Error handling message: {e}")
             await self.send_output(websocket, "error", "", error=str(e))
-
-    async def connect(self):
-        print("Attempting to connect...")
-        if not self.client_id:
-            print("Error: No client ID available")
-            return False
-
-        websocket_url = f"{self.server_url}/{self.client_id}"
-        print(f"WebSocket URL: {websocket_url}")
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        try:
-            async with websockets.connect(
-                websocket_url,
-                ping_interval=30,
-                ping_timeout=10,
-            ) as websocket:
-                print(f"Connected as {self.client_id} from {self.computer_name}")
-
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "device_connected",
-                            "email": self.owner_email,
-                            "machine_name": self.computer_name,
-                        }
-                    )
-                )
-
-                while not self.shutdown_event.is_set():
-                    try:
-                        message = await asyncio.wait_for(websocket.recv(), timeout=1.0)
-                        print(f"Received message: {message}")
-                        await self.handle_message(websocket, message)
-                    except asyncio.TimeoutError:
-                        continue
-                    except websockets.exceptions.ConnectionClosed:
-                        print("Connection closed")
-                        return False
-                    except Exception as e:
-                        print(f"Error in message loop: {e}")
-                        return False
-
-                return True
-
-        except (websockets.exceptions.WebSocketException, ssl.SSLError) as e:
-            print(f"Connection error: {e}")
-            return False
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            return False
 
     async def start(self):
         retries = 0
@@ -284,54 +321,46 @@ class WSClient:
                 print(f"Critical error: {e}")
                 break
 
-    async def shutdown(self):
-        print("Initiating shutdown...")
-        self.shutdown_event.set()
 
-        if self.client_id:
-            websocket_url = f"{self.server_url}/{self.client_id}"
-            try:
-                async with websockets.connect(
-                    websocket_url,
-                    ping_interval=30,
-                    ping_timeout=10,
-                ) as websocket:
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "type": "device_disconnected",
-                                "email": self.owner_email,
-                                "machine_name": self.computer_name,
-                            }
-                        )
-                    )
-                    print("Disconnect message sent")
+async def main_async():
+    client = WSClient()
 
-            except Exception as e:
-                print(f"Error sending disconnect message: {e}")
+    # Setup signal handlers
+    loop = asyncio.get_running_loop()
+
+    async def shutdown_handler(signal_name):
+        print(f"\nReceived {signal_name}, initiating shutdown...")
+        await client.shutdown()
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.stop()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(
+            sig, lambda s=sig: asyncio.create_task(shutdown_handler(s.name))
+        )
+
+    try:
+        # Save PID to file
+        with open("/tmp/sticktator.pid", "w") as f:
+            f.write(str(os.getpid()))
+
+        await client.start()
+    except Exception as e:
+        print(f"Fatal error: {e}")
+    finally:
+        # Clean up PID file
+        try:
+            os.remove("/tmp/sticktator.pid")
+        except FileNotFoundError:
+            pass
 
 
 def main():
     print("Starting WSClient...")
-    client = WSClient()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    def handle_exit(signum, frame):
-        print("\nShutting down...")
-        loop.create_task(client.shutdown())
-
-    signal.signal(signal.SIGINT, handle_exit)
-    signal.signal(signal.SIGTERM, handle_exit)
-
-    try:
-        loop.run_until_complete(client.start())
-    except Exception as e:
-        print(f"Fatal error: {e}")
-    finally:
-        pending = asyncio.all_tasks(loop)
-        loop.run_until_complete(asyncio.gather(*pending))
-        loop.close()
+    asyncio.run(main_async())
 
 
 if __name__ == "__main__":

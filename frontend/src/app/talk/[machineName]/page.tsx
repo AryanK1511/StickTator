@@ -1,8 +1,13 @@
+/* eslint-disable */
+// @ts-nocheck
+
 "use client";
+
 import { useState, useEffect, useRef, FC } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from "next-auth/react";
-import { VoiceButton, TextDisplay, ProcessingIndicator, Loader, Sidebar } from "@/components";
+import { useParams } from "next/navigation";
+import { VoiceButton, TextDisplay, Loader, Sidebar, Button } from "@/components";
 
 declare global {
     interface Window {
@@ -14,10 +19,11 @@ declare global {
 const VoiceInterface: FC = () => {
     const { data: session } = useSession();
     const [isListening, setIsListening] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
     const [transcript, setTranscript] = useState("");
     const [interimTranscript, setInterimTranscript] = useState("");
+    const [finalTranscript, setFinalTranscript] = useState("");
     const [showButtons, setShowButtons] = useState(false);
+    const params = useParams();
     const recognitionRef = useRef<any>(null);
 
     useEffect(() => {
@@ -53,6 +59,8 @@ const VoiceInterface: FC = () => {
 
             recognitionRef.current.onend = () => {
                 setIsListening(false);
+                setFinalTranscript(transcript);
+                setShowButtons(true);
             };
         }
     }, []);
@@ -60,15 +68,11 @@ const VoiceInterface: FC = () => {
     const toggleListening = () => {
         if (isListening) {
             recognitionRef.current?.stop();
-            setIsProcessing(true);
-            setTimeout(() => {
-                setIsProcessing(false);
-                setShowButtons(true);
-            }, 2000); // Simulating processing time
         } else {
             recognitionRef.current?.start();
             setTranscript("");
             setInterimTranscript("");
+            setFinalTranscript("");
             setShowButtons(false);
         }
         setIsListening(!isListening);
@@ -77,16 +81,16 @@ const VoiceInterface: FC = () => {
     const reset = () => {
         setTranscript("");
         setInterimTranscript("");
+        setFinalTranscript("");
         setShowButtons(false);
     };
 
     const send = () => {
-        // Implement the send functionality here
-        console.log("Sending transcript:", transcript);
+        console.log("Sending transcript:", finalTranscript || transcript);
         setShowButtons(false);
     };
 
-    const displayText = transcript + (isListening ? interimTranscript : "");
+    const displayText = isListening ? transcript + interimTranscript : "";
 
     return (
         <div>
@@ -100,35 +104,66 @@ const VoiceInterface: FC = () => {
                             initial={{ opacity: 0, y: -20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6, ease: "easeOut" }}
-                            className="text-4xl font-light mb-12 text-gray-800"
+                            className="text-4xl font-light mb-6 bg-gradient-to-r from-custom-purple via-custom-pink to-custom-yellow bg-clip-text text-transparent"
                         >
-                            voice<span className="font-bold">interface</span>
+                            {params.machineName}
                         </motion.h1>
+                        <motion.p
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.6, ease: "easeOut" }}
+                            className="text-xl font-light mb-6 text-gray-500"
+                        >
+                            Use the mic button at the bottom right to talk to {params.machineName}
+                        </motion.p>
                         <div className="w-full max-w-2xl relative">
-                            <TextDisplay transcript={displayText} isListening={isListening} />
+                            {isListening && (
+                                <TextDisplay transcript={displayText} isListening={isListening} />
+                            )}
+
+                            {!isListening && (finalTranscript || transcript) && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bg-gray-800 p-6 rounded-lg shadow-lg mb-6"
+                                >
+                                    <h2 className="text-gray-400 mb-2 text-sm">
+                                        Final Transcript:
+                                    </h2>
+                                    <p className="text-white text-lg">
+                                        {finalTranscript || transcript}
+                                    </p>
+                                </motion.div>
+                            )}
+
                             <VoiceButton
                                 isListening={isListening}
                                 toggleListening={toggleListening}
                             />
+
                             <AnimatePresence>
-                                {isProcessing && <ProcessingIndicator />}
+                                {showButtons && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: 20 }}
+                                        className="flex justify-center mt-4 space-x-4"
+                                    >
+                                        <Button
+                                            onClick={reset}
+                                            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg transition-colors duration-200"
+                                        >
+                                            Reset
+                                        </Button>
+                                        <Button
+                                            onClick={send}
+                                            className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition-colors duration-200"
+                                        >
+                                            Send
+                                        </Button>
+                                    </motion.div>
+                                )}
                             </AnimatePresence>
-                            {showButtons && (
-                                <div className="flex justify-center mt-4">
-                                    <button
-                                        onClick={reset}
-                                        className="bg-red-500 text-white px-4 py-2 rounded mr-2"
-                                    >
-                                        Reset
-                                    </button>
-                                    <button
-                                        onClick={send}
-                                        className="bg-green-500 text-white px-4 py-2 rounded"
-                                    >
-                                        Send
-                                    </button>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>

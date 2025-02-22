@@ -5,10 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { TextDisplayProps } from "@/lib";
 
 export const TextDisplay: FC<TextDisplayProps> = ({ transcript, isListening }) => {
+    if (!isListening) return null;
+
     const words = transcript.split(" ");
 
     return (
-        <div className="min-h-[200px] bg-gray-50 rounded-lg p-6 shadow-sm">
+        <div className="min-h-[200px] bg-transparent border-2 border-custom-purple rounded-lg p-6 shadow-sm">
             <AnimatePresence>
                 {words.map((word, index) => (
                     <motion.span
@@ -17,7 +19,7 @@ export const TextDisplay: FC<TextDisplayProps> = ({ transcript, isListening }) =
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
-                        className="inline-block mr-2 text-gray-800 text-lg"
+                        className="inline-block mr-2 text-gray-300 text-lg"
                     >
                         {word}
                     </motion.span>

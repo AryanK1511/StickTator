@@ -14,6 +14,7 @@ import {
     Loader,
     Sidebar,
     Button,
+    MessageDisplay,
 } from "@/components";
 import { ApiHelper } from "@/lib";
 
@@ -24,9 +25,9 @@ const VoiceInterface: FC = () => {
     const [transcript, setTranscript] = useState("");
     const [interimTranscript, setInterimTranscript] = useState("");
     const [finalTranscript, setFinalTranscript] = useState("");
-    const [showButtons, setShowButtons] = useState(false);
+    const [showControls, setShowControls] = useState(false);
     const [messages, setMessages] = useState<string[]>([]);
-    const [showMessages, setShowMessages] = useState(false);
+    const [showLogs, setShowLogs] = useState(false);
     const params = useParams();
     const recognitionRef = useRef<any>(null);
     const socketRef = useRef<WebSocket | null>(null);
@@ -74,35 +75,35 @@ const VoiceInterface: FC = () => {
             recognitionRef.current.onend = () => {
                 setIsListening(false);
                 setFinalTranscript(transcript);
-                setShowButtons(true);
+                setShowControls(true);
             };
         }
     }, []);
 
     useEffect(() => {
-        if (showMessages) {
-            socketRef.current = new WebSocket(
-                "ws://localhost:8000/ws/v1/frontend/aryankhurana2324"
-            );
+        const userId = session?.user?.email;
+        console.log(userId);
+        socketRef.current = new WebSocket(
+            `ws://${process.env.NEXT_PUBLIC_BACKEND_URL}/ws/v1/frontend/${userId}`
+        );
 
-            socketRef.current.onmessage = (event) => {
-                const message = event.data;
-                setMessages((prevMessages) => [...prevMessages, message]);
-            };
+        socketRef.current.onmessage = (event) => {
+            const message = event.data;
+            setMessages((prevMessages) => [...prevMessages, message]);
+        };
 
-            socketRef.current.onerror = (error) => {
-                console.error("WebSocket error:", error);
-            };
+        socketRef.current.onerror = (error) => {
+            console.error("WebSocket error:", error);
+        };
 
-            socketRef.current.onclose = () => {
-                console.log("WebSocket connection closed");
-            };
+        socketRef.current.onclose = () => {
+            console.log("WebSocket connection closed");
+        };
 
-            return () => {
-                socketRef.current?.close();
-            };
-        }
-    }, [showMessages]);
+        return () => {
+            socketRef.current?.close();
+        };
+    }, []);
 
     const toggleListening = () => {
         if (isListening) {
@@ -112,8 +113,8 @@ const VoiceInterface: FC = () => {
             setTranscript("");
             setInterimTranscript("");
             setFinalTranscript("");
-            setShowButtons(false);
-            setShowMessages(false);
+            setShowControls(false);
+            setShowLogs(false);
             setMessages([]);
         }
         setIsListening(!isListening);
@@ -123,29 +124,31 @@ const VoiceInterface: FC = () => {
         setTranscript("");
         setInterimTranscript("");
         setFinalTranscript("");
-        setShowButtons(false);
-        setShowMessages(false);
+        setShowControls(false);
+        setShowLogs(false);
         setMessages([]);
     };
 
     const send = async () => {
         setIsProcessing(true);
-        setShowMessages(true);
 
         try {
             const api = new ApiHelper();
             const response = await api.post("machines/get-commands", {
                 user_intent: finalTranscript || transcript,
             });
+            setShowLogs(true);
 
             const machine_execution = await api.post(
                 `machines/send_message/${session?.user?.email?.split("@")[0]}`,
                 { type: "execute", ...response.data }
             );
 
-            if (socketRef.current?.readyState === WebSocket.OPEN) {
-                socketRef.current?.send(JSON.stringify(machine_execution.data));
-            }
+            console.log(machine_execution);
+
+            // if (socketRef.current?.readyState === WebSocket.OPEN) {
+            //     socketRef.current?.send(JSON.stringify(machine_execution.data));
+            // }
         } catch (error) {
             console.error("Error sending message:", error);
             setMessages((prev) => [...prev, "Error processing your request"]);
@@ -157,7 +160,9 @@ const VoiceInterface: FC = () => {
     return (
         <div>
             {!session?.user ? (
-                <Loader />
+                <div className="flex justify-center items-center min-h-screen">
+                    <Loader />
+                </div>
             ) : (
                 <div className="ml-[90px]">
                     <Sidebar user={session?.user} />
@@ -181,14 +186,9 @@ const VoiceInterface: FC = () => {
                         </motion.p>
 
                         <div className="w-full max-w-2xl relative">
-                            {isListening && (
-                                <TextDisplay
-                                    transcript={transcript + interimTranscript}
-                                    isListening={isListening}
-                                />
-                            )}
-
-                            {!isListening && (finalTranscript || transcript) && (
+                            {/* Only show transcript during or after recording */}
+                            {(isListening ||
+                                (!isListening && !showLogs && (finalTranscript || transcript))) && (
                                 <motion.div
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -196,7 +196,9 @@ const VoiceInterface: FC = () => {
                                 >
                                     <h2 className="text-gray-400 mb-2 text-sm">Your message:</h2>
                                     <p className="text-white text-lg">
-                                        {finalTranscript || transcript}
+                                        {isListening
+                                            ? transcript + interimTranscript
+                                            : finalTranscript || transcript}
                                     </p>
                                 </motion.div>
                             )}
@@ -206,12 +208,9 @@ const VoiceInterface: FC = () => {
                                 toggleListening={toggleListening}
                             />
 
+                            {/* Show controls only after recording and before sending */}
                             <AnimatePresence>
-                                {isProcessing && <ProcessingIndicator />}
-                            </AnimatePresence>
-
-                            <AnimatePresence>
-                                {showButtons && (
+                                {showControls && !showLogs && (
                                     <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
@@ -234,25 +233,26 @@ const VoiceInterface: FC = () => {
                                 )}
                             </AnimatePresence>
 
+                            {/* Show processing indicator when needed */}
                             <AnimatePresence>
-                                {showMessages && (
+                                {isProcessing && <ProcessingIndicator />}
+                            </AnimatePresence>
+
+                            {/* Show logs after sending */}
+                            <AnimatePresence>
+                                {showLogs && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: "auto" }}
                                         exit={{ opacity: 0, height: 0 }}
                                         className="bg-gray-800 p-6 rounded-lg shadow-lg mt-6 w-full"
                                     >
-                                        <h2 className="text-gray-400 mb-2 text-sm">Processing:</h2>
+                                        <h2 className="text-gray-400 mb-2 text-sm">
+                                            Execution Logs:
+                                        </h2>
                                         <div className="text-white text-lg max-h-96 overflow-y-auto">
                                             {messages.map((msg, index) => (
-                                                <motion.p
-                                                    key={index}
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    className="mb-2"
-                                                >
-                                                    {msg}
-                                                </motion.p>
+                                                <MessageDisplay message={msg} key={index} />
                                             ))}
                                             <div ref={messagesEndRef} />
                                         </div>

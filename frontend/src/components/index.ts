@@ -16,3 +16,4 @@ export { MachineCard } from "./custom/Dashboard/Machines/MachineCard";
 export { VoiceButton } from "./custom/Talk/VoiceButton";
 export { ProcessingIndicator } from "./custom/Talk/ProcessingIndicator";
 export { TextDisplay } from "./custom/Talk/TextDisplay";
+export { MessageDisplay } from "./custom/Dashboard/Machines/MessageDisplay";

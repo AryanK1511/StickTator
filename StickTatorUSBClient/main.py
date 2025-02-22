@@ -45,18 +45,7 @@ class WSClient:
         print(f"Handling message: {message}")
         try:
             data = json.loads(message)
-            if data.get("type") == "ping":
-                print("Received ping, sending pong...")
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "pong",
-                            "client_id": self.client_id,
-                            "computer_name": self.computer_name,
-                        }
-                    )
-                )
-            elif data.get("type") == "execute":
+            if data.get("type") == "execute":
                 print("Received execute command...")
                 execution_plan = data.get("execution_plan")
                 if execution_plan:
@@ -76,6 +65,7 @@ class WSClient:
                             )
                             while True:
                                 output = await process.stdout.readline()
+                                print(f"Output: {output}")
                                 if not output:
                                     break
                                 if output:
@@ -104,6 +94,18 @@ class WSClient:
                                             "computer_name": self.computer_name,
                                             "command": combined_cmd,
                                             "error": error_str,
+                                        }
+                                    )
+                                )
+                            else:
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "command_output",
+                                            "client_id": self.client_id,
+                                            "computer_name": self.computer_name,
+                                            "command": combined_cmd,
+                                            "output": "Command successfully executed with no output",
                                         }
                                     )
                                 )

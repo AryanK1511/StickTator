@@ -17,13 +17,6 @@ import {
 } from "@/components";
 import { ApiHelper } from "@/lib";
 
-declare global {
-    interface Window {
-        SpeechRecognition: any;
-        webkitSpeechRecognition: any;
-    }
-}
-
 const VoiceInterface: FC = () => {
     const { data: session } = useSession();
     const [isListening, setIsListening] = useState(false);
@@ -32,8 +25,20 @@ const VoiceInterface: FC = () => {
     const [interimTranscript, setInterimTranscript] = useState("");
     const [finalTranscript, setFinalTranscript] = useState("");
     const [showButtons, setShowButtons] = useState(false);
+    const [messages, setMessages] = useState<string[]>([]);
+    const [showMessages, setShowMessages] = useState(false);
     const params = useParams();
     const recognitionRef = useRef<any>(null);
+    const socketRef = useRef<WebSocket | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     useEffect(() => {
         if (
@@ -74,6 +79,31 @@ const VoiceInterface: FC = () => {
         }
     }, []);
 
+    useEffect(() => {
+        if (showMessages) {
+            socketRef.current = new WebSocket(
+                "ws://localhost:8000/ws/v1/frontend/aryankhurana2324"
+            );
+
+            socketRef.current.onmessage = (event) => {
+                const message = event.data;
+                setMessages((prevMessages) => [...prevMessages, message]);
+            };
+
+            socketRef.current.onerror = (error) => {
+                console.error("WebSocket error:", error);
+            };
+
+            socketRef.current.onclose = () => {
+                console.log("WebSocket connection closed");
+            };
+
+            return () => {
+                socketRef.current?.close();
+            };
+        }
+    }, [showMessages]);
+
     const toggleListening = () => {
         if (isListening) {
             recognitionRef.current?.stop();
@@ -83,6 +113,8 @@ const VoiceInterface: FC = () => {
             setInterimTranscript("");
             setFinalTranscript("");
             setShowButtons(false);
+            setShowMessages(false);
+            setMessages([]);
         }
         setIsListening(!isListening);
     };
@@ -92,26 +124,35 @@ const VoiceInterface: FC = () => {
         setInterimTranscript("");
         setFinalTranscript("");
         setShowButtons(false);
+        setShowMessages(false);
+        setMessages([]);
     };
 
     const send = async () => {
-        console.log("Sending transcript:", finalTranscript || transcript);
-        const api = new ApiHelper();
-        const response = await api.post("machines/get-commands", {
-            user_intent: finalTranscript || transcript,
-        });
+        setIsProcessing(true);
+        setShowMessages(true);
 
-        console.log(response);
+        try {
+            const api = new ApiHelper();
+            const response = await api.post("machines/get-commands", {
+                user_intent: finalTranscript || transcript,
+            });
 
-        const machine_execution = await api.post(
-            `machines/send_message/${session?.user?.email?.split("@")[0]}`,
-            { type: "execute", ...response.data }
-        );
+            const machine_execution = await api.post(
+                `machines/send_message/${session?.user?.email?.split("@")[0]}`,
+                { type: "execute", ...response.data }
+            );
 
-        console.log(machine_execution);
+            if (socketRef.current?.readyState === WebSocket.OPEN) {
+                socketRef.current?.send(JSON.stringify(machine_execution.data));
+            }
+        } catch (error) {
+            console.error("Error sending message:", error);
+            setMessages((prev) => [...prev, "Error processing your request"]);
+        } finally {
+            setIsProcessing(false);
+        }
     };
-
-    const displayText = isListening ? transcript + interimTranscript : "";
 
     return (
         <div>
@@ -129,17 +170,22 @@ const VoiceInterface: FC = () => {
                         >
                             {params.machineName}
                         </motion.h1>
+
                         <motion.p
                             initial={{ opacity: 0, y: -20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6, ease: "easeOut" }}
                             className="text-xl font-light mb-6 text-gray-500"
                         >
-                            Use the mic button at the bottom right to talk to {params.machineName}
+                            Use the mic button to talk to {params.machineName}
                         </motion.p>
+
                         <div className="w-full max-w-2xl relative">
                             {isListening && (
-                                <TextDisplay transcript={displayText} isListening={isListening} />
+                                <TextDisplay
+                                    transcript={transcript + interimTranscript}
+                                    isListening={isListening}
+                                />
                             )}
 
                             {!isListening && (finalTranscript || transcript) && (
@@ -148,9 +194,7 @@ const VoiceInterface: FC = () => {
                                     animate={{ opacity: 1, y: 0 }}
                                     className="bg-gray-800 p-6 rounded-lg shadow-lg mb-6"
                                 >
-                                    <h2 className="text-gray-400 mb-2 text-sm">
-                                        Final Transcript:
-                                    </h2>
+                                    <h2 className="text-gray-400 mb-2 text-sm">Your message:</h2>
                                     <p className="text-white text-lg">
                                         {finalTranscript || transcript}
                                     </p>
@@ -186,6 +230,32 @@ const VoiceInterface: FC = () => {
                                         >
                                             Send
                                         </Button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <AnimatePresence>
+                                {showMessages && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="bg-gray-800 p-6 rounded-lg shadow-lg mt-6 w-full"
+                                    >
+                                        <h2 className="text-gray-400 mb-2 text-sm">Processing:</h2>
+                                        <div className="text-white text-lg max-h-96 overflow-y-auto">
+                                            {messages.map((msg, index) => (
+                                                <motion.p
+                                                    key={index}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="mb-2"
+                                                >
+                                                    {msg}
+                                                </motion.p>
+                                            ))}
+                                            <div ref={messagesEndRef} />
+                                        </div>
                                     </motion.div>
                                 )}
                             </AnimatePresence>

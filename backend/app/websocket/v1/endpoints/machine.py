@@ -54,6 +54,15 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                         "info",
                         f"Command output from {machine_id}: {command} -> {output}",
                     )
+                    # Send command output to frontend
+                    await WebSocketService.broadcast_to_frontends(
+                        {
+                            "type": "command_output",
+                            "machine_id": machine_id,
+                            "command": command,
+                            "output": output,
+                        }
+                    )
 
                 # Log command error
                 elif message.get("type") == "command_error":
@@ -62,6 +71,14 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                     CustomLogger.create_log(
                         "error",
                         f"Command error from {machine_id}: {command} -> {error}",
+                    )
+                    await WebSocketService.broadcast_to_frontends(
+                        {
+                            "type": "command_error",
+                            "machine_id": machine_id,
+                            "command": command,
+                            "error": error,
+                        }
                     )
 
             except json.JSONDecodeError:

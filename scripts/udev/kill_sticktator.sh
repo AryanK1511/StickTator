@@ -1,5 +1,4 @@
 #!/usr/bin/bash
-
 # Filename: /usr/local/bin/kill_sticktator.sh
 # Logs: /tmp/udev.log
 # Change udev rules using : sudo vim /etc/udev/rules.d/80-local.rules
@@ -8,22 +7,31 @@
 if [ -f "/tmp/sticktator.pid" ]; then
     MAIN_PID=$(cat /tmp/sticktator.pid)
     
-    # Kill the entire process group
-    pkill -TERM -P $MAIN_PID
-    kill -TERM -$MAIN_PID
+    # First try graceful shutdown with SIGTERM
+    kill -TERM $MAIN_PID 2>/dev/null
+    pkill -TERM -P $MAIN_PID 2>/dev/null
     
-    # Force kill if still running after 5 seconds
-    sleep 5
-    if ps -p $MAIN_PID > /dev/null; then
-        pkill -KILL -P $MAIN_PID
-        kill -KILL -$MAIN_PID
+    # Give the process time to cleanup and send disconnect message
+    TIMEOUT=10
+    COUNTER=0
+    while [ $COUNTER -lt $TIMEOUT ] && ps -p $MAIN_PID >/dev/null 2>&1; do
+        sleep 1
+        COUNTER=$((COUNTER + 1))
+    done
+    
+    # If process is still running after timeout, force kill
+    if ps -p $MAIN_PID >/dev/null 2>&1; then
+        echo "Process didn't terminate gracefully, force killing at $(date)" >> /tmp/udev.log
+        pkill -KILL -P $MAIN_PID 2>/dev/null
+        kill -KILL $MAIN_PID 2>/dev/null
+    else
+        echo "Process terminated gracefully at $(date)" >> /tmp/udev.log
     fi
     
-    rm /tmp/sticktator.pid
-    echo "Killed StickTator processes at $(date)" >> /tmp/udev.log
-    
+    # Cleanup
+    rm -f /tmp/sticktator.pid
     rm -rf /home/aryank1511/Desktop/StickTatorUSBClient
-    echo "Removed folder at $(date)" >> /tmp/udev.log
+    echo "Cleanup completed at $(date)" >> /tmp/udev.log
 else
     echo "No PID file found for StickTator at $(date)" >> /tmp/udev.log
 fi

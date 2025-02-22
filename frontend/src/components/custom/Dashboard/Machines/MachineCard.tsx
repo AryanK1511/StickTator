@@ -50,11 +50,21 @@ export const MachineCard: FC<{ machine: Machine }> = ({ machine }) => {
                             className={`w-6 h-6 ${isConnected ? "text-green-400" : "text-red-400"}`}
                         />
                     </Button>
-                    <Link href={`/talk/${machine.name}`}>
+                    <Link href={isConnected ? `/talk/${machine.name}` : "#"}>
                         <Button
                             variant="ghost"
                             className="flex items-center px-4 py-2 rounded-full bg-custom-purple/70 hover:bg-custom-purple/50 hover:text-white duration-200 text-white"
-                            onClick={() => console.log(`Interacting with ${machine.name}`)}
+                            onClick={(e) => {
+                                if (!isConnected) {
+                                    e.preventDefault();
+                                    console.log(
+                                        `Cannot interact with ${machine.name} as it is disconnected`
+                                    );
+                                } else {
+                                    console.log(`Interacting with ${machine.name}`);
+                                }
+                            }}
+                            disabled={!isConnected}
                         >
                             <Mic className="w-4 h-4 mr-2" />
                             <span className="font-medium">Talk</span>

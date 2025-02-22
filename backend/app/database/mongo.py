@@ -99,23 +99,23 @@ class MongoDBHandler:
         return updated_user
 
     def add_report(
-        self, email: str, machine_id: str, s3_url: str, description: str
+        self, email: str, machine_name: str, s3_url: str, description: str
     ) -> Dict:
         user = self.find_user_by_email(email)
         if not user:
             raise ValueError(f"User with email {email} not found")
 
-        machine_obj_id = ObjectId(machine_id)
+        # Ensure machine_name is treated as a string
         machine_exists = any(
-            machine["_id"] == machine_obj_id for machine in user["machines"]
+            machine["name"] == machine_name for machine in user["machines"]
         )
         if not machine_exists:
-            raise ValueError(f"Machine {machine_id} not found for user {email}")
+            raise ValueError(f"Machine {machine_name} not found for user {email}")
 
         report = {
             "_id": ObjectId(),
             "markdown_report_s3_url": s3_url,
-            "machine_id": machine_id,
+            "machine_name": machine_name,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "description": description,
         }

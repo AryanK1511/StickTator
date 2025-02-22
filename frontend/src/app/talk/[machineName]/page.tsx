@@ -156,6 +156,11 @@ const VoiceInterface: FC = () => {
         }
     };
 
+    const createReport = () => {
+        console.log("Creating report with the following logs and output:");
+        console.log(messages);
+    };
+
     return (
         <div>
             {!session?.user ? (
@@ -207,7 +212,6 @@ const VoiceInterface: FC = () => {
                                 toggleListening={toggleListening}
                             />
 
-                            {/* Show controls only after recording and before sending */}
                             <AnimatePresence>
                                 {showControls && !showLogs && (
                                     <motion.div
@@ -253,6 +257,12 @@ const VoiceInterface: FC = () => {
                                             ))}
                                             <div ref={messagesEndRef} />
                                         </div>
+                                        <Button
+                                            onClick={createReport}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors duration-200 mt-4"
+                                        >
+                                            Create Report
+                                        </Button>
                                     </motion.div>
                                 )}
                             </AnimatePresence>

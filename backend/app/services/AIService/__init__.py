@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict
+from typing import Dict, List, Tuple, Union
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -105,15 +105,79 @@ class AIService:
                             f"Dangerous command pattern detected: {pattern}"
                         )
 
+    def generate_report(
+        self, execution_result: Dict[str, Union[str, List[str]]]
+    ) -> Tuple[str, str]:
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": """You are an expert system administrator and technical writer. Your task is to create detailed, 
+                    professional markdown reports from command execution results. The report should include:
 
-if __name__ == "__main__":
-    service = AIService()
-    try:
-        operation = service.generate_commands(
-            "install and configure postgresql with a new database"
-        )
+                    1. A clear title and timestamp
+                    2. Command execution context and purpose
+                    3. Detailed analysis of the command output
+                    4. Any potential implications or recommendations
+                    5. Next steps or related commands that might be useful
 
-        print(operation)
+                    Format the report professionally using markdown, including:
+                    - Clear section headers
+                    - Code blocks for commands and outputs
+                    - Tables where appropriate
+                    - Bold/italic emphasis for important points
+                    
+                    Make the report informative yet concise, focusing on what's most relevant to a system administrator
+                    or developer. Avoid any placeholder text - all content should be specific to the actual command and output provided.""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Generate a detailed markdown report for this command execution:
+                    
+                    Machine ID: {execution_result['machine_id']}
+                    Command: {execution_result['command']}
+                    Output: {json.dumps(execution_result['output'])}
+                    Type: {execution_result['type']}
+                    
+                    Analyze the output and provide meaningful insights.""",
+                },
+            ]
 
-    except Exception as e:
-        print(f"Error: {e}")
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.7,
+            )
+
+            report_content = response.choices[0].message.content
+
+            # Generate a one-liner description
+            description_messages = [
+                {
+                    "role": "system",
+                    "content": """You are an expert system administrator and technical writer. Your task is to create a concise, 
+                    one-liner description of the command execution result.""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Generate a one-liner description for this command execution:
+                    
+                    Machine ID: {execution_result['machine_id']}
+                    Command: {execution_result['command']}
+                    Output: {json.dumps(execution_result['output'])}
+                    Type: {execution_result['type']}""",
+                },
+            ]
+
+            description_response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=description_messages,
+                temperature=0.7,
+            )
+
+            description = description_response.choices[0].message.content
+
+            return report_content, description
+
+        except Exception as e:
+            raise Exception(f"Error generating report: {str(e)}")

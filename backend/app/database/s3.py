@@ -18,10 +18,10 @@ class S3Handler:
         )
         self.bucket_name = os.getenv("S3_BUCKET_NAME")
 
-    def upload_report(self, user_id: str, markdown_content: str) -> Dict[str, str]:
+    def upload_report(self, user_email: str, markdown_content: str) -> Dict[str, str]:
         try:
             report_id = str(uuid.uuid4())
-            key = f"{user_id}/{report_id}.md"
+            key = f"{user_email}/{report_id}.md"
 
             self.s3.put_object(
                 Bucket=self.bucket_name,
@@ -38,9 +38,9 @@ class S3Handler:
             print(f"Error uploading report: {str(e)}")
             raise
 
-    def get_report(self, user_id: str, report_id: str) -> str:
+    def get_report(self, user_email: str, report_id: str) -> str:
         try:
-            key = f"{user_id}/{report_id}.md"
+            key = f"{user_email}/{report_id}.md"
 
             response = self.s3.get_object(Bucket=self.bucket_name, Key=key)
 
@@ -50,10 +50,10 @@ class S3Handler:
             print(f"Error fetching report: {str(e)}")
             raise
 
-    def get_all_reports(self, user_id: str) -> List[Dict[str, str]]:
+    def get_all_reports(self, user_email: str) -> List[Dict[str, str]]:
         try:
             response = self.s3.list_objects_v2(
-                Bucket=self.bucket_name, Prefix=f"{user_id}/"
+                Bucket=self.bucket_name, Prefix=f"{user_email}/"
             )
 
             if "Contents" not in response:
@@ -77,9 +77,9 @@ class S3Handler:
             print(f"Error fetching all reports: {str(e)}")
             raise
 
-    def delete_report(self, user_id: str, report_id: str) -> None:
+    def delete_report(self, user_email: str, report_id: str) -> None:
         try:
-            key = f"{user_id}/{report_id}.md"
+            key = f"{user_email}/{report_id}.md"
 
             self.s3.delete_object(Bucket=self.bucket_name, Key=key)
 

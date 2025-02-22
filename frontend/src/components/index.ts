@@ -10,7 +10,6 @@ export { Avatar } from "./ui/avatar";
 export { Sidebar } from "./custom/Dashboard/Sidebar";
 export { Loader } from "./custom/Loader/Loader";
 export { Machines } from "./custom/Dashboard/Machines/Machines";
-export { Statistics } from "./custom/Dashboard/Statistics/Statistics";
 export { MarkdownRenderer } from "./custom/Dashboard/History/MarkdownRenderer";
 export { MachineCard } from "./custom/Dashboard/Machines/MachineCard";
 export { VoiceButton } from "./custom/Talk/VoiceButton";

@@ -35,9 +35,9 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                 # If a device is disconnected, change the status of the device in the DB and tell the frontend about the disconnection
                 elif message.get("type") == "device_disconnected":
                     email = message.get("email")
-                    machine_dbid = message.get("machine_dbid")
+                    machine_name = message.get("machine_name")
                     result = db.update_machine_status(
-                        email, machine_dbid, "disconnected"
+                        email, machine_name, "disconnected"
                     )
                     await WebSocketService.broadcast_to_frontends(
                         {
@@ -85,6 +85,13 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                 await websocket.send_json(
                     {"type": "error", "message": "Invalid JSON format"}
                 )
+            except Exception as e:
+                CustomLogger.create_log("error", f"Error processing message: {e}")
+                await websocket.send_json({"type": "error", "message": str(e)})
 
     except WebSocketDisconnect:
+        WebSocketService.disconnect_machine(machine_id)
+        CustomLogger.create_log("info", f"Machine {machine_id} disconnected")
+    except Exception as e:
+        CustomLogger.create_log("error", f"Unexpected error: {e}")
         WebSocketService.disconnect_machine(machine_id)

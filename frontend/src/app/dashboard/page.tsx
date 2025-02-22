@@ -2,7 +2,7 @@
 
 import { FC } from "react";
 import { useSession } from "next-auth/react";
-import { Sidebar, Loader, Machines, Statistics } from "@/components";
+import { Sidebar, Loader, Machines } from "@/components";
 
 const Dashboard: FC = () => {
     const { data: session } = useSession();
@@ -23,11 +23,10 @@ const Dashboard: FC = () => {
                                 </span>
                             </h1>
                             <p className="text-white">
-                                Lorem ipsum dolor sit amet, consectetur adipisicing elit. Voluptatum
-                                minus temporibus quam?
+                                Welcome to your dashboard. Here you can manage your devices and talk
+                                to them.
                             </p>
                         </div>
-                        <Statistics />
                         <Machines user={session?.user} />
                     </div>
                 </div>

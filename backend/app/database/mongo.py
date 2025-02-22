@@ -73,26 +73,21 @@ class MongoDBHandler:
 
         return updated_user
 
-    def update_machine_status(self, email: str, machine_id: str, status: str) -> Dict:
+    def update_machine_status(self, email: str, machine_name: str, status: str) -> Dict:
         if status not in ["connected", "disconnected"]:
             raise ValueError("Status must be either 'connected' or 'disconnected'")
-
-        machine_obj_id = ObjectId(machine_id)
-        print(
-            f"Updating machine status for machine_id: {machine_id} (ObjectId: {machine_obj_id})"
-        )
 
         user = self.find_user_by_email(email)
         if not user:
             raise ValueError(f"User with email {email} not found")
 
         machine_exists = any(
-            str(machine["_id"]) == str(machine_obj_id) for machine in user["machines"]
+            machine["name"] == machine_name for machine in user["machines"]
         )
         if not machine_exists:
-            raise ValueError(f"Machine {machine_id} not found for user {email}")
+            raise ValueError(f"Machine {machine_name} not found for user {email}")
 
-        query = {"email": email, "machines._id": machine_obj_id}
+        query = {"email": email, "machines.name": machine_name}
         update = {"$set": {"machines.$.status": status}}
 
         self.users.update_one(query, update)

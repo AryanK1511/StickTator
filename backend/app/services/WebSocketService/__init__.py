@@ -95,4 +95,6 @@ class WebSocketService:
                 )
                 WebSocketService.disconnect_machine(machine_id)
                 return False
+        else:
+            CustomLogger.create_log("error", f"Machine {machine_id} not connected")
         return False

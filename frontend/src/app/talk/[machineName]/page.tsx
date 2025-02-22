@@ -81,14 +81,13 @@ const VoiceInterface: FC = () => {
     }, []);
 
     useEffect(() => {
-        const userId = session?.user?.email;
-        console.log(userId);
         socketRef.current = new WebSocket(
-            `ws://${process.env.NEXT_PUBLIC_BACKEND_URL}/ws/v1/frontend/${userId}`
+            `ws://${process.env.NEXT_PUBLIC_BACKEND_URL}/ws/v1/frontend/aryankhurana2324@gmail.com`
         );
 
         socketRef.current.onmessage = (event) => {
             const message = event.data;
+            console.log(message);
             setMessages((prevMessages) => [...prevMessages, message]);
         };
 
@@ -131,24 +130,21 @@ const VoiceInterface: FC = () => {
 
     const send = async () => {
         setIsProcessing(true);
+        setShowLogs(true);
 
         try {
+            console.log("Sending message:", finalTranscript || transcript);
             const api = new ApiHelper();
             const response = await api.post("machines/get-commands", {
                 user_intent: finalTranscript || transcript,
             });
-            setShowLogs(true);
 
-            const machine_execution = await api.post(
-                `machines/send_message/${session?.user?.email?.split("@")[0]}`,
-                { type: "execute", ...response.data }
-            );
+            const machine_execution = await api.post(`machines/send_message/aryankhurana2324`, {
+                type: "execute",
+                ...response.data,
+            });
 
             console.log(machine_execution);
-
-            // if (socketRef.current?.readyState === WebSocket.OPEN) {
-            //     socketRef.current?.send(JSON.stringify(machine_execution.data));
-            // }
         } catch (error) {
             console.error("Error sending message:", error);
             setMessages((prev) => [...prev, "Error processing your request"]);
@@ -161,7 +157,7 @@ const VoiceInterface: FC = () => {
         <div>
             {!session?.user ? (
                 <div className="flex justify-center items-center min-h-screen">
-                    <Loader />
+                    <h1>Loading...</h1>
                 </div>
             ) : (
                 <div className="ml-[90px]">
@@ -233,12 +229,10 @@ const VoiceInterface: FC = () => {
                                 )}
                             </AnimatePresence>
 
-                            {/* Show processing indicator when needed */}
                             <AnimatePresence>
                                 {isProcessing && <ProcessingIndicator />}
                             </AnimatePresence>
 
-                            {/* Show logs after sending */}
                             <AnimatePresence>
                                 {showLogs && (
                                     <motion.div

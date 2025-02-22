@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import platform
+import signal
 import ssl
 from pathlib import Path
 
@@ -27,6 +28,7 @@ class WSClient:
         print(f"Computer name: {self.computer_name}")
         self.max_retries = 5
         self.retry_delay = 5
+        self.shutdown_event = asyncio.Event()
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
@@ -50,42 +52,116 @@ class WSClient:
                 execution_plan = data.get("execution_plan")
                 if execution_plan:
                     for category in execution_plan.get("categories", []):
+                        if self.shutdown_event.is_set():
+                            break
+
                         commands = [
                             cmd.get("command")
                             for cmd in category.get("commands", [])
                             if cmd.get("command")
                         ]
+
                         if commands:
                             combined_cmd = " && ".join(commands)
                             print(f"Executing combined commands: {combined_cmd}")
-                            process = await asyncio.create_subprocess_shell(
-                                combined_cmd,
-                                stdout=asyncio.subprocess.PIPE,
-                                stderr=asyncio.subprocess.PIPE,
-                            )
-                            while True:
-                                output = await process.stdout.readline()
-                                print(f"Output: {output}")
-                                if not output:
-                                    break
-                                if output:
-                                    output_str = output.decode().strip()
-                                    self.logger.info(f"Command output: {output_str}")
+
+                            try:
+                                process = await asyncio.create_subprocess_shell(
+                                    combined_cmd,
+                                    stdout=asyncio.subprocess.PIPE,
+                                    stderr=asyncio.subprocess.PIPE,
+                                )
+
+                                # Handle stdout in real-time
+                                while True:
+                                    if self.shutdown_event.is_set():
+                                        process.terminate()
+                                        break
+
+                                    try:
+                                        output = await asyncio.wait_for(
+                                            process.stdout.readline(), timeout=1.0
+                                        )
+                                        if not output:  # Process has finished
+                                            break
+
+                                        output_str = output.decode().strip()
+                                        if output_str:  # Only send non-empty output
+                                            self.logger.info(
+                                                f"Command output: {output_str}"
+                                            )
+                                            await websocket.send(
+                                                json.dumps(
+                                                    {
+                                                        "type": "command_output",
+                                                        "client_id": self.client_id,
+                                                        "computer_name": self.computer_name,
+                                                        "command": combined_cmd,
+                                                        "output": output_str,
+                                                    }
+                                                )
+                                            )
+                                    except asyncio.TimeoutError:
+                                        # Check if process has finished
+                                        if process.returncode is not None:
+                                            break
+                                        continue
+                                    except Exception as e:
+                                        self.logger.error(f"Error reading stdout: {e}")
+                                        break
+
+                                # Wait for process to complete
+                                try:
+                                    returncode = await asyncio.wait_for(
+                                        process.wait(), timeout=5.0
+                                    )
+                                except asyncio.TimeoutError:
+                                    self.logger.warning(
+                                        "Process took too long to complete, terminating..."
+                                    )
+                                    process.terminate()
+                                    try:
+                                        await asyncio.wait_for(
+                                            process.wait(), timeout=2.0
+                                        )
+                                    except asyncio.TimeoutError:
+                                        process.kill()  # Force kill if terminate doesn't work
+                                    returncode = -1
+
+                                # Handle any remaining stderr
+                                error = await process.stderr.read()
+                                error_str = error.decode().strip() if error else None
+
+                                if error_str:
+                                    self.logger.error(f"Command error: {error_str}")
                                     await websocket.send(
                                         json.dumps(
                                             {
-                                                "type": "command_output",
+                                                "type": "command_error",
                                                 "client_id": self.client_id,
                                                 "computer_name": self.computer_name,
                                                 "command": combined_cmd,
-                                                "output": output_str,
+                                                "error": error_str,
                                             }
                                         )
                                     )
-                            error = await process.stderr.read()
-                            if error:
-                                error_str = error.decode().strip()
-                                self.logger.error(f"Command error: {error_str}")
+
+                                # Send completion message
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "command_complete",
+                                            "client_id": self.client_id,
+                                            "computer_name": self.computer_name,
+                                            "command": combined_cmd,
+                                            "status": returncode,
+                                            "success": returncode == 0,
+                                        }
+                                    )
+                                )
+
+                            except Exception as e:
+                                self.logger.error(f"Error executing command: {e}")
                                 await websocket.send(
                                     json.dumps(
                                         {
@@ -93,26 +169,29 @@ class WSClient:
                                             "client_id": self.client_id,
                                             "computer_name": self.computer_name,
                                             "command": combined_cmd,
-                                            "error": error_str,
+                                            "error": str(e),
                                         }
                                     )
                                 )
-                            else:
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "command_output",
-                                            "client_id": self.client_id,
-                                            "computer_name": self.computer_name,
-                                            "command": combined_cmd,
-                                            "output": "Command successfully executed with no output",
-                                        }
-                                    )
-                                )
+
         except json.JSONDecodeError:
-            print(f"Error: Invalid JSON received: {message}")
+            self.logger.error(f"Error: Invalid JSON received: {message}")
         except Exception as e:
-            print(f"Error handling message: {e}")
+            self.logger.error(f"Error handling message: {e}")
+            # Send error to server to maintain connection
+            try:
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "client_id": self.client_id,
+                            "computer_name": self.computer_name,
+                            "error": str(e),
+                        }
+                    )
+                )
+            except:
+                pass  # If we can't send the error, don't crash
 
     async def connect(self):
         print("Attempting to connect...")
@@ -129,7 +208,6 @@ class WSClient:
         try:
             async with websockets.connect(
                 websocket_url,
-                # ssl=ssl_context,
                 ping_interval=30,
                 ping_timeout=10,
             ) as websocket:
@@ -145,17 +223,21 @@ class WSClient:
                     )
                 )
 
-                while True:
+                while not self.shutdown_event.is_set():
                     try:
-                        message = await websocket.recv()
+                        message = await asyncio.wait_for(websocket.recv(), timeout=1.0)
                         print(f"Received message: {message}")
                         await self.handle_message(websocket, message)
+                    except asyncio.TimeoutError:
+                        continue
                     except websockets.exceptions.ConnectionClosed:
                         print("Connection closed")
                         return False
                     except Exception as e:
                         print(f"Error in message loop: {e}")
                         return False
+
+                return True
 
         except (websockets.exceptions.WebSocketException, ssl.SSLError) as e:
             print(f"Connection error: {e}")
@@ -166,35 +248,77 @@ class WSClient:
 
     async def start(self):
         retries = 0
-        while retries < self.max_retries:
+        while not self.shutdown_event.is_set() and retries < self.max_retries:
             try:
                 if await self.connect():
                     retries = 0
                 else:
                     retries += 1
-                    if retries < self.max_retries:
+                    if retries < self.max_retries and not self.shutdown_event.is_set():
                         wait_time = self.retry_delay * (2 ** (retries - 1))
                         print(
                             f"Reconnecting in {wait_time} seconds... (Attempt {retries}/{self.max_retries})"
                         )
-                        await asyncio.sleep(wait_time)
+                        try:
+                            await asyncio.wait_for(
+                                self.shutdown_event.wait(), timeout=wait_time
+                            )
+                        except asyncio.TimeoutError:
+                            continue
                     else:
-                        print("Max retries reached. Exiting...")
+                        print("Max retries reached or shutdown requested. Exiting...")
                         break
             except Exception as e:
                 print(f"Critical error: {e}")
                 break
 
+    async def shutdown(self):
+        print("Initiating shutdown...")
+        self.shutdown_event.set()
+
+        if self.client_id:
+            websocket_url = f"{self.server_url}/{self.client_id}"
+            try:
+                async with websockets.connect(
+                    websocket_url,
+                    ping_interval=30,
+                    ping_timeout=10,
+                ) as websocket:
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "device_disconnected",
+                                "email": self.owner_email,
+                                "machine_name": self.computer_name,
+                            }
+                        )
+                    )
+                    print("Disconnect message sent")
+            except Exception as e:
+                print(f"Error sending disconnect message: {e}")
+
 
 def main():
     print("Starting WSClient...")
     client = WSClient()
-    try:
-        asyncio.run(client.start())
-    except KeyboardInterrupt:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    def handle_exit(signum, frame):
         print("\nShutting down...")
+        loop.create_task(client.shutdown())
+
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+
+    try:
+        loop.run_until_complete(client.start())
     except Exception as e:
         print(f"Fatal error: {e}")
+    finally:
+        pending = asyncio.all_tasks(loop)
+        loop.run_until_complete(asyncio.gather(*pending))
+        loop.close()
 
 
 if __name__ == "__main__":

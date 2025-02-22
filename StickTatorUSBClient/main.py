@@ -17,7 +17,7 @@ class WSClient:
     def __init__(self):
         print("Initializing WSClient...")
         self.server_url = (
-            f'ws://{os.getenv("SERVER_URL", "127.0.0.1:8000")}/ws/v1/machine'
+            f'wss://{os.getenv("SERVER_URL", "127.0.0.1:8000")}/ws/v1/machine'
         )
         print(f"Server URL: {self.server_url}")
         self.owner_email = self._read_owner_file()

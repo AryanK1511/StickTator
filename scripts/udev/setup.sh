@@ -20,7 +20,7 @@ if [ -d "$USB_PATH" ]; then
    chown -R aryank1511:aryank1511 "$DEST_PATH"
    su - aryank1511 -c "python3 -m venv $VENV_PATH"
    su - aryank1511 -c "source $VENV_PATH/bin/activate && pip3 install -r $DEST_PATH/requirements.txt"
-   echo "SERVER_URL='4f88-70-49-58-68.ngrok-free.app'" > "$ENV_FILE"
+   echo "SERVER_URL='a168-216-249-49-30.ngrok-free.app'" > "$ENV_FILE"
    chown aryank1511:aryank1511 "$ENV_FILE"
    su - aryank1511 -c "($VENV_PATH/bin/python3 $DEST_PATH/main.py & echo \$! > /tmp/sticktator.pid)" >> $LOG_FILE 2>&1
    echo "Setup completed successfully" >> $LOG_FILE

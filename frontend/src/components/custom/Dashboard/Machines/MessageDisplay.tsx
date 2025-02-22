@@ -55,7 +55,7 @@ export const MessageDisplay = ({ message }) => {
                 );
 
             case "command_error":
-            case "command_output":
+            case "command_complete":
                 return (
                     <div className="space-y-1">
                         <p className="font-medium text-white">

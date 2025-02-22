@@ -60,7 +60,7 @@ class AIService:
 
             while True:
                 response = self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-4o-mini",
                     messages=messages,
                     temperature=0.1,
                     response_format={"type": "json_object"},

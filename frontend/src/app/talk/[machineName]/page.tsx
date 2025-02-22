@@ -129,8 +129,8 @@ const VoiceInterface: FC = () => {
     };
 
     const send = async () => {
-        setIsProcessing(true);
         setShowLogs(true);
+        setIsProcessing(true);
 
         try {
             console.log("Sending message:", finalTranscript || transcript);
@@ -139,12 +139,15 @@ const VoiceInterface: FC = () => {
                 user_intent: finalTranscript || transcript,
             });
 
+            console.log(response);
+
             const machine_execution = await api.post(`machines/send_message/aryankhurana2324`, {
                 type: "execute",
                 ...response.data,
             });
 
             console.log(machine_execution);
+            console.log(messages);
         } catch (error) {
             console.error("Error sending message:", error);
             setMessages((prev) => [...prev, "Error processing your request"]);

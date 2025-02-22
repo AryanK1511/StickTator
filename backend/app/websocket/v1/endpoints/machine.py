@@ -47,7 +47,7 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                     )
 
                 # Log command output
-                elif message.get("type") == "command_output":
+                elif message.get("type") == "command_complete":
                     command = message.get("command")
                     output = message.get("output")
                     CustomLogger.create_log(
@@ -57,7 +57,7 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                     # Send command output to frontend
                     await WebSocketService.broadcast_to_frontends(
                         {
-                            "type": "command_output",
+                            "type": "command_complete",
                             "machine_id": machine_id,
                             "command": command,
                             "output": output,

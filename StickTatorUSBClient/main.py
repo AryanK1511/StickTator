@@ -43,6 +43,39 @@ class WSClient:
             print(f"Error reading owner.txt: {e}")
             return None
 
+    async def send_output(
+        self,
+        websocket,
+        output_type: str,
+        command: str,
+        output: str = None,
+        status: int = None,
+        success: bool = None,
+        error: str = None,
+    ):
+        """Helper function to send formatted output messages"""
+        message = {
+            "type": output_type,
+            "client_id": self.client_id,
+            "computer_name": self.computer_name,
+            "command": command,
+        }
+
+        if output is not None:
+            message["output"] = output
+        if status is not None:
+            message["status"] = status
+        if success is not None:
+            message["success"] = success
+        if error is not None:
+            message["error"] = error
+
+        try:
+            await websocket.send(json.dumps(message))
+            print(f"Sent {output_type} message: {message}")
+        except Exception as e:
+            self.logger.error(f"Error sending {output_type} message: {e}")
+
     async def handle_message(self, websocket, message: str):
         print(f"Handling message: {message}")
         try:
@@ -70,44 +103,63 @@ class WSClient:
                                     combined_cmd,
                                     stdout=asyncio.subprocess.PIPE,
                                     stderr=asyncio.subprocess.PIPE,
+                                    shell=True,
                                 )
 
-                                # Handle stdout in real-time
+                                # Buffer for accumulating output
+                                output_buffer = []
+
                                 while True:
                                     if self.shutdown_event.is_set():
                                         process.terminate()
                                         break
 
+                                    # Read from both stdout and stderr
                                     try:
-                                        output = await asyncio.wait_for(
-                                            process.stdout.readline(), timeout=1.0
-                                        )
-                                        if not output:  # Process has finished
+                                        stdout_data = await process.stdout.readline()
+                                        stderr_data = await process.stderr.readline()
+
+                                        if (
+                                            not stdout_data
+                                            and not stderr_data
+                                            and process.returncode is not None
+                                        ):
                                             break
 
-                                        output_str = output.decode().strip()
-                                        if output_str:  # Only send non-empty output
-                                            self.logger.info(
-                                                f"Command output: {output_str}"
-                                            )
-                                            await websocket.send(
-                                                json.dumps(
-                                                    {
-                                                        "type": "command_output",
-                                                        "client_id": self.client_id,
-                                                        "computer_name": self.computer_name,
-                                                        "command": combined_cmd,
-                                                        "output": output_str,
-                                                    }
+                                        # Handle stdout
+                                        if stdout_data:
+                                            output_line = stdout_data.decode().strip()
+                                            if output_line:
+                                                output_buffer.append(output_line)
+                                                # Send immediate output update
+                                                await self.send_output(
+                                                    websocket,
+                                                    "command_output",
+                                                    combined_cmd,
+                                                    output=output_line,
                                                 )
-                                            )
+
+                                        # Handle stderr
+                                        if stderr_data:
+                                            error_line = stderr_data.decode().strip()
+                                            if error_line:
+                                                output_buffer.append(
+                                                    f"ERROR: {error_line}"
+                                                )
+                                                # Send immediate error output
+                                                await self.send_output(
+                                                    websocket,
+                                                    "command_output",
+                                                    combined_cmd,
+                                                    output=f"ERROR: {error_line}",
+                                                )
+
                                     except asyncio.TimeoutError:
-                                        # Check if process has finished
-                                        if process.returncode is not None:
-                                            break
                                         continue
                                     except Exception as e:
-                                        self.logger.error(f"Error reading stdout: {e}")
+                                        self.logger.error(
+                                            f"Error reading process output: {e}"
+                                        )
                                         break
 
                                 # Wait for process to complete
@@ -125,73 +177,33 @@ class WSClient:
                                             process.wait(), timeout=2.0
                                         )
                                     except asyncio.TimeoutError:
-                                        process.kill()  # Force kill if terminate doesn't work
+                                        process.kill()
                                     returncode = -1
 
-                                # Handle any remaining stderr
-                                error = await process.stderr.read()
-                                error_str = error.decode().strip() if error else None
-
-                                if error_str:
-                                    self.logger.error(f"Command error: {error_str}")
-                                    await websocket.send(
-                                        json.dumps(
-                                            {
-                                                "type": "command_error",
-                                                "client_id": self.client_id,
-                                                "computer_name": self.computer_name,
-                                                "command": combined_cmd,
-                                                "error": error_str,
-                                            }
-                                        )
-                                    )
-
-                                # Send completion message
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "command_complete",
-                                            "client_id": self.client_id,
-                                            "computer_name": self.computer_name,
-                                            "command": combined_cmd,
-                                            "status": returncode,
-                                            "success": returncode == 0,
-                                        }
-                                    )
+                                # Send final completion message
+                                await self.send_output(
+                                    websocket,
+                                    "command_complete",
+                                    combined_cmd,
+                                    output="\n".join(output_buffer),
+                                    status=returncode,
+                                    success=returncode == 0,
                                 )
 
                             except Exception as e:
                                 self.logger.error(f"Error executing command: {e}")
-                                await websocket.send(
-                                    json.dumps(
-                                        {
-                                            "type": "command_error",
-                                            "client_id": self.client_id,
-                                            "computer_name": self.computer_name,
-                                            "command": combined_cmd,
-                                            "error": str(e),
-                                        }
-                                    )
+                                await self.send_output(
+                                    websocket,
+                                    "command_error",
+                                    combined_cmd,
+                                    error=str(e),
                                 )
 
         except json.JSONDecodeError:
             self.logger.error(f"Error: Invalid JSON received: {message}")
         except Exception as e:
             self.logger.error(f"Error handling message: {e}")
-            # Send error to server to maintain connection
-            try:
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "error",
-                            "client_id": self.client_id,
-                            "computer_name": self.computer_name,
-                            "error": str(e),
-                        }
-                    )
-                )
-            except:
-                pass  # If we can't send the error, don't crash
+            await self.send_output(websocket, "error", "", error=str(e))
 
     async def connect(self):
         print("Attempting to connect...")
@@ -294,6 +306,7 @@ class WSClient:
                         )
                     )
                     print("Disconnect message sent")
+
             except Exception as e:
                 print(f"Error sending disconnect message: {e}")
 

@@ -24,7 +24,7 @@ declare global {
     }
 }
 
-const VoiceInterface: FC = () => {
+const RunCommandsInterface: FC = () => {
     const { data: session } = useSession();
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -103,12 +103,7 @@ const VoiceInterface: FC = () => {
 
         console.log(response);
 
-        const machine_execution = await api.post(
-            `machines/send_message/${session?.user?.email?.split("@")[0]}`,
-            { type: "execute", ...response.data }
-        );
-
-        console.log(machine_execution);
+        // const command_response = await api.post("machines/run-command", {
     };
 
     const displayText = isListening ? transcript + interimTranscript : "";

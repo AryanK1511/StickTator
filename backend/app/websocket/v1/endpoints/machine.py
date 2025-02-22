@@ -46,6 +46,24 @@ async def machine_websocket_endpoint(websocket: WebSocket, machine_id: str):
                         }
                     )
 
+                # Log command output
+                elif message.get("type") == "command_output":
+                    command = message.get("command")
+                    output = message.get("output")
+                    CustomLogger.create_log(
+                        "info",
+                        f"Command output from {machine_id}: {command} -> {output}",
+                    )
+
+                # Log command error
+                elif message.get("type") == "command_error":
+                    command = message.get("command")
+                    error = message.get("error")
+                    CustomLogger.create_log(
+                        "error",
+                        f"Command error from {machine_id}: {command} -> {error}",
+                    )
+
             except json.JSONDecodeError:
                 await websocket.send_json(
                     {"type": "error", "message": "Invalid JSON format"}

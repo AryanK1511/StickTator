@@ -2,13 +2,14 @@ from fastapi import APIRouter, Response
 from fastapi import Request as ServerRequest
 
 from app.services.AIService import AIService
+from app.services.WebSocketService import WebSocketService
 from app.utils.logger import CustomLogger
 from app.utils.response import error_response, success_response
 
 router = APIRouter()
 
 
-@router.get("/get-commands")
+@router.post("/get-commands")
 async def get_commands(req: ServerRequest, res: Response):
     try:
         data = await req.json()
@@ -27,3 +28,12 @@ async def get_commands(req: ServerRequest, res: Response):
     except Exception as e:
         CustomLogger.create_log("error", f"Error creating user: {str(e)}")
         raise e
+
+
+@router.post("/send_message/{machine_id}")
+async def send_message(machine_id: str, message: dict):
+    await WebSocketService.send_to_machine(machine_id, message)
+    CustomLogger.create_log(
+        "info", f"Sent message to machine: {machine_id}, message: {message}"
+    )
+    return success_response("Message sent to machine")

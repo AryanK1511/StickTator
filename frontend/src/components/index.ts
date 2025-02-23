@@ -16,3 +16,6 @@ export { VoiceButton } from "./custom/Talk/VoiceButton";
 export { ProcessingIndicator } from "./custom/Talk/ProcessingIndicator";
 export { TextDisplay } from "./custom/Talk/TextDisplay";
 export { MessageDisplay } from "./custom/Dashboard/Machines/MessageDisplay";
+export { AllReports } from "./custom/Dashboard/History/AllReports";
+export { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+export { Alert, AlertDescription } from "./ui/alert";

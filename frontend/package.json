@@ -25,10 +25,13 @@
         "react-dom": "^18",
         "react-markdown": "^9.0.3",
         "rehype-highlight": "^7.0.2",
+        "rehype-raw": "^7.0.0",
+        "remark-gfm": "^4.0.1",
         "tailwind-merge": "^3.0.1",
         "tailwindcss-animate": "^1.0.7"
     },
     "devDependencies": {
+        "@types/date-fns": "^2.6.3",
         "@types/node": "^20",
         "@types/react": "^18",
         "@types/react-dom": "^18",

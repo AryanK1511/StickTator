@@ -60,3 +60,43 @@ async def generate_report(
     except Exception as e:
         CustomLogger.create_log("error", f"Unexpected Error: {str(e)}")
         raise e
+
+
+@router.get("/reports/{user_email}")
+async def get_all_reports(user_email: str, res: Response):
+    try:
+        user_email = user_email.lower() + "@gmail.com"
+        mongo_handler = MongoDBHandler()
+
+        reports = mongo_handler.get_all_reports(user_email)
+        for report in reports:
+            report["_id"] = str(report["_id"])
+
+        return success_response("Reports fetched successfully", 200, res, reports)
+    except ValueError as e:
+        CustomLogger.create_log("error", f"Error fetching reports: {str(e)}")
+        return error_response(str(e), 400, res)
+    except Exception as e:
+        CustomLogger.create_log("error", f"Unexpected Error: {str(e)}")
+        raise e
+
+
+@router.get("/reports/{user_email}/{report_id}")
+async def get_report(user_email: str, report_id: str, res: Response):
+    try:
+        user_email = user_email.lower() + "@gmail.com"
+        mongo_handler = MongoDBHandler()
+
+        report = mongo_handler.get_report(user_email, report_id)
+
+        if not report:
+            return error_response("Report not found", 404, res)
+
+        report["_id"] = str(report["_id"])
+        return success_response("Report fetched successfully", 200, res, report)
+    except ValueError as e:
+        CustomLogger.create_log("error", f"Error fetching report: {str(e)}")
+        return error_response(str(e), 400, res)
+    except Exception as e:
+        CustomLogger.create_log("error", f"Unexpected Error: {str(e)}")
+        raise e

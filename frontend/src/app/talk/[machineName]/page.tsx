@@ -28,6 +28,7 @@ const VoiceInterface: FC = () => {
     const [showControls, setShowControls] = useState(false);
     const [messages, setMessages] = useState<string[]>([]);
     const [showLogs, setShowLogs] = useState(false);
+    const [isCreatingReport, setIsCreatingReport] = useState(false);
     const params = useParams();
     const recognitionRef = useRef<any>(null);
     const socketRef = useRef<WebSocket | null>(null);
@@ -129,8 +130,8 @@ const VoiceInterface: FC = () => {
     };
 
     const send = async () => {
-        setShowLogs(true);
         setIsProcessing(true);
+        setShowLogs(true);
 
         try {
             console.log("Sending message:", finalTranscript || transcript);
@@ -156,9 +157,31 @@ const VoiceInterface: FC = () => {
         }
     };
 
-    const createReport = () => {
+    const createReport = async () => {
         console.log("Creating report with the following logs and output:");
         console.log(messages);
+        setIsCreatingReport(true);
+
+        try {
+            const api = new ApiHelper();
+
+            // get the first index of messages an convert to json and send it
+            const firstMessage = JSON.parse(messages[0]);
+            const response = await api.post(
+                `report/generate-report/aryankhurana2324/${params.machineName}`,
+                firstMessage
+            );
+
+            if (response.status) {
+                window.location.href = "/history";
+            } else {
+                console.error("Failed to create report:", response.statusText);
+            }
+        } catch (error) {
+            console.error("Error creating report:", error);
+        } finally {
+            setIsCreatingReport(false);
+        }
     };
 
     return (
@@ -242,12 +265,7 @@ const VoiceInterface: FC = () => {
 
                             <AnimatePresence>
                                 {showLogs && (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        className="bg-gray-800 p-6 rounded-lg shadow-lg mt-6 w-full"
-                                    >
+                                    <div className="bg-gray-800 p-6 rounded-lg shadow-lg mt-6 w-full">
                                         <h2 className="text-gray-400 mb-2 text-sm">
                                             Execution Logs:
                                         </h2>
@@ -259,11 +277,14 @@ const VoiceInterface: FC = () => {
                                         </div>
                                         <Button
                                             onClick={createReport}
-                                            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors duration-200 mt-4"
+                                            className="bg-custom-purple hover:bg-custom-purple/50 text-white px-6 py-2 rounded-lg transition-colors duration-200 mt-4"
+                                            disabled={isCreatingReport}
                                         >
-                                            Create Report
+                                            {isCreatingReport
+                                                ? "Creating Report..."
+                                                : "Create Report"}
                                         </Button>
-                                    </motion.div>
+                                    </div>
                                 )}
                             </AnimatePresence>
                         </div>

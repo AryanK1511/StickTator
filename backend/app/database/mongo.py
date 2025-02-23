@@ -181,3 +181,14 @@ class MongoDBHandler:
         for machine in machines:
             machine["_id"] = str(machine["_id"])
         return machines
+
+    def get_report(self, email: str, report_id: str) -> Optional[Dict]:
+        user = self.find_user_by_email(email)
+        if not user:
+            raise ValueError(f"User with email {email} not found")
+
+        report_obj_id = ObjectId(report_id)
+        for report in user["history"]:
+            if report["_id"] == report_obj_id:
+                return report
+        return None

@@ -9,7 +9,7 @@ export const Navbar: FC = () => {
             </div>
 
             <div className="flex items-center gap-8">
-                <LPButton text="Checkout DoraHacks" />
+                <LPButton text="DoraHacks" />
             </div>
         </nav>
     );

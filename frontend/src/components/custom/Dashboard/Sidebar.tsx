@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Home, Album, LogOut } from "lucide-react";
-import { default as NextImage } from "next/image";
+import Image, { default as NextImage } from "next/image";
 import { signOut } from "next-auth/react";
 import { Avatar } from "@/components";
 import type { User } from "@/lib";
@@ -15,11 +15,14 @@ export const Sidebar: FC<{ user: User }> = ({ user }) => {
 
     return (
         <div className="fixed left-0 top-0 bottom-0 w-[80px] bg-black flex flex-col items-center py-6 gap-8">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-                className="w-10 h-10 bg-custom-purple rounded-xl"
+            <Image
+                onClick={() => {
+                    window.location.href = "/";
+                }}
+                src="/assets/logo.png"
+                alt="Logo"
+                height={40}
+                width={40}
             />
 
             <nav className="flex-1 flex flex-col items-center gap-4">

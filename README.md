@@ -6,6 +6,8 @@
 [![YouTube](https://img.shields.io/badge/YouTube-Video-red?style=for-the-badge)](https://www.youtube.com/watch?v=D45z3ocJdIc)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
+🥈 Second Prize Overall, 🥇 Best Developer Tool by Warp, 🥇 Best Solo Hack Winner at [HackCanada](https://hackcanada.org).
+
 ### A USB stick that lets you chat with any computer and control it through simple conversations
 
 ![Cover Image](./assets/cover.JPG)

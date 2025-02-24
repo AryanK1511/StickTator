@@ -14,6 +14,11 @@ export const authOptions: NextAuthOptions = {
         Google({
             clientId: GOOGLE_CLIENT_ID,
             clientSecret: GOOGLE_CLIENT_SECRET,
+            authorization: {
+                params: {
+                    prompt: "select_account",
+                },
+            },
         }),
     ],
     callbacks: {
@@ -21,29 +26,24 @@ export const authOptions: NextAuthOptions = {
             if (!profile || !profile.email) {
                 return false;
             }
-
             try {
                 const api = new ApiHelper();
                 const response = await api.post("users/add", {
                     name: profile.name,
                     email: profile.email,
-                    // @ts-expect-error: picture is not in the profile type
+                    // @ts-expect-error: Property 'picture' does not exist on type 'Profile'.
                     image: profile.picture,
                 });
-
                 console.log(response);
-
                 if (!response.status) {
                     return false;
                 }
-
                 return true;
             } catch (error) {
                 console.error("Error signing in:", error);
                 return false;
             }
         },
-
         async redirect({ baseUrl }) {
             return `${baseUrl}/dashboard`;
         },
